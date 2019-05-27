@@ -9,7 +9,6 @@ import requests
 
 
 # TODO:
-# - Execute Black
 # - Fix flake8 errors
 # - Check for Already downloaded (Prevent Dups)
 # - Windows/Linux Check
@@ -28,9 +27,7 @@ ARTISTS_PAGE = "https://www.pixiv.net/ajax/user/{}/profile/all"  # API call
 IMAGES_PAGE = (
     "https://www.pixiv.net/member_illust.php?mode=medium&illust_id={}"
 )
-GALLERY_PAGE = (
-    "https://www.pixiv.net/bookmark_new_illust.php?p={}"
-)
+GALLERY_PAGE = "https://www.pixiv.net/bookmark_new_illust.php?p={}"
 
 
 def get_pictures(illustration_id, save_to, device_token, php_session_id):
@@ -47,7 +44,7 @@ def get_pictures(illustration_id, save_to, device_token, php_session_id):
             "cookie": "PHPSESSID={}; device_token={}".format(
                 php_session_id, device_token
             )
-        }
+        },
     )
 
     if response.status_code not in range(200, 299):
@@ -57,9 +54,9 @@ def get_pictures(illustration_id, save_to, device_token, php_session_id):
     # Multi-picture gallery
     if "multiple_illust_viewer" in response.text:
         total_images = int(
-            re.compile(
-                r""".*pageCount":([0-9]+).*"""
-            ).search(response.text).groups()[0]
+            re.compile(r""".*pageCount":([0-9]+).*""")
+            .search(response.text)
+            .groups()[0]
         )
 
     # Zip file
@@ -86,14 +83,16 @@ def get_pictures(illustration_id, save_to, device_token, php_session_id):
     while x < total_images and image_link:
         image = image_link.format(x)
         LOGGER.info("Getting: {}".format(image))
-        command = " ".join([
-            "wget",
-            image,
-            "--header=\"referer: {}\"".format(
-                IMAGES_PAGE.format(illustration_id)
-            ),
-            "--directory-prefix={}".format(save_to),
-        ])
+        command = " ".join(
+            [
+                "wget",
+                image,
+                '--header="referer: {}"'.format(
+                    IMAGES_PAGE.format(illustration_id)
+                ),
+                "--directory-prefix={}".format(save_to),
+            ]
+        )
         subprocess.call(command, shell=True)
         x += 1
 
@@ -111,9 +110,9 @@ def get_artists_gallery(artist_id, save_to, device_token, php_session_id):
             "cookie": "PHPSESSID={}; device_token={}; referer={}".format(
                 php_session_id,
                 device_token,
-                ARTISTS_PAGE.format(artist_id, page_id)
+                ARTISTS_PAGE.format(artist_id, page_id),
             )
-        }
+        },
     )
     try:
         body = response.json()
@@ -143,14 +142,14 @@ def get_pictures_from_gallery(page, save_to, device_token, php_session_id):
             "cookie": "PHPSESSID={}; device_token={}".format(
                 php_session_id, device_token
             )
-        }
+        },
     )
 
     if response.status_code not in range(200, 299):
         print("Failed with status: {}".format(response.status_code))
         return
 
-    text = response.text.replace("&quot;", "\"")
+    text = response.text.replace("&quot;", '"')
     text = text.replace("&gt;", ">")
     text = text.replace("&lt;", "<")
     text = text.replace("&amp;", "&")
@@ -187,8 +186,7 @@ if __name__ == "__main__":
         type=str,
     )
     parser.add_argument(
-        "--artists",
-        help="The specific artist ids, comma separated",
+        "--artists", help="The specific artist ids, comma separated"
     )
     parser.add_argument(
         "--illustration_ids",
