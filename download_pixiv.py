@@ -8,6 +8,17 @@ import subprocess
 import requests
 
 
+# TODO:
+# - Execute Black
+# - Fix flake8 errors
+# - Check for Already downloaded (Prevent Dups)
+# - Windows/Linux Check
+# - Add docs on how grab your tokens from your browser
+# - Use something other than wget to download so it works in Windows
+# - Save/Read tokens from file
+# - Possibily logging in via script only
+
+
 LOGGER = logging.getLogger(__name__)
 VERSION = "1.0.0"
 
