@@ -9,7 +9,7 @@ import requests
 
 
 # TODO:
-# - Fix flake8 errors
+# - Use proper logging
 # - Check for Already downloaded (Prevent Dups)
 # - Windows/Linux Check
 # - Add docs on how grab your tokens from your browser
@@ -19,7 +19,7 @@ import requests
 
 
 LOGGER = logging.getLogger(__name__)
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 ZIP_PAGE = "https://i.pximg.net/img-zip-ugoira/img/{}_ugoira1920x1080.zip"
@@ -64,20 +64,21 @@ def get_pictures(illustration_id, save_to, device_token, php_session_id):
 
     if is_zip:
         items = re.compile(
-            r"""original":"https://i\.pximg\.net/img-original/img/([0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+)_ugoira0\.[a-z]{3}"\},"""
+            r"""original":"https://i\.pximg\.net/img-original/img/"""
+            + r"([0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+)"
+            + r"""_ugoira0\.[a-z]{3}"\},"""
         ).findall(response.text.replace("\\", ""))
     else:
         items = re.compile(
-            r"""original":"(https\://i\.pximg\.net/img-original/img/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+_p0\.[a-z]{3})"\},"""
+            r"""original":"(https\://i\.pximg\.net/img-original/img/"""
+            + r"[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+"
+            + r"""_p0\.[a-z]{3})"\},"""
         ).findall(response.text.replace("\\", ""))
 
     if items and is_zip:
         image_link = ZIP_PAGE.format(items[0])
     elif items:
         image_link = items[0].replace("_p0", "_p{}")
-
-    print(items)
-    print(image_link)
 
     x = 0
     while x < total_images and image_link:
@@ -189,7 +190,7 @@ if __name__ == "__main__":
         "--artists", help="The specific artist ids, comma separated"
     )
     parser.add_argument(
-        "--illustration_ids",
+        "--illustrations",
         help="The specific illustration ids, comma separated",
     )
     parser.add_argument(
@@ -205,9 +206,12 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.illustration_ids:
-        illustration_ids = args.illustration_ids.split(",")
+    if args.illustrations:
+        illustration_ids = set(args.illustrations.split(","))
         for illustration_id in illustration_ids:
+            if not illustration_id:
+                continue  # Skip blanks
+
             get_pictures(
                 illustration_id=illustration_id,
                 save_to=args.save_to,
@@ -216,8 +220,11 @@ if __name__ == "__main__":
             )
 
     if args.artists:
-        artists = args.artists.split(",")
+        artists = set(args.artists.split(","))
         for artist_id in artists:
+            if not artist_id:
+                continue  # Skip blanks
+
             get_artists_gallery(
                 artist_id=artist_id,
                 save_to=args.save_to,
@@ -226,8 +233,11 @@ if __name__ == "__main__":
             )
 
     if args.pages:
-        pages = args.pages.split(",")
+        pages = set(args.pages.split(","))
         for page in pages:
+            if not page:
+                continue  # Skip blanks
+
             if "-" in page:
                 for page in range(*[int(x) for x in page.split("-")]):
                     get_pictures_from_gallery(
