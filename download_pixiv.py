@@ -18,7 +18,7 @@ import requests
 # - Save/Read tokens from file
 
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -42,15 +42,10 @@ logging.config.dictConfig(CONFIG)
 LOGGER = logging.getLogger(__name__)
 DEBUG = False
 
-ZIP_PAGE = (
-    "https://i.pximg.net/img-zip-ugoira/img/{}_ugoira1920x1080.zip"
-)
-ARTISTS_PAGE = (
-    "https://www.pixiv.net/ajax/user/{}/profile/all"
-)  # API call
+ZIP_PAGE = "https://i.pximg.net/img-zip-ugoira/img/{}_ugoira1920x1080.zip"
+ARTISTS_PAGE = "https://www.pixiv.net/ajax/user/{}/profile/all"  # API call
 IMAGES_PAGE = (
-    "https://www.pixiv.net/member_illust.php?mode=medium&"
-    + "illust_id={}"
+    "https://www.pixiv.net/member_illust.php?mode=medium&" + "illust_id={}"
 )
 GALLERY_PAGE = "https://www.pixiv.net/bookmark_new_illust.php?p={}"
 DUPLICATES = set()
@@ -83,14 +78,11 @@ def get_pictures(illustration_id, save_to, php_session_id):
     cookie = "PHPSESSID={};".format(php_session_id)
 
     response = requests.get(
-        IMAGES_PAGE.format(illustration_id),
-        headers={"cookie": cookie},
+        IMAGES_PAGE.format(illustration_id), headers={"cookie": cookie}
     )
 
     if response.status_code not in range(200, 299):
-        LOGGER.error(
-            "Failed with status: {}".format(response.status_code)
-        )
+        LOGGER.error("Failed with status: {}".format(response.status_code))
         return
 
     # Multi-picture gallery
@@ -99,9 +91,7 @@ def get_pictures(illustration_id, save_to, php_session_id):
         content = json.loads(
             MULTIPLE_PAGES_SEARCH.search(response.text).groups()[0]
         )
-        total_images = content["illust"][str(illustration_id)][
-            "pageCount"
-        ]
+        total_images = content["illust"][str(illustration_id)]["pageCount"]
 
         LOGGER.debug("Found {} pages".format(total_images))
 
@@ -110,9 +100,7 @@ def get_pictures(illustration_id, save_to, php_session_id):
 
     if is_zip:
         LOGGER.debug("Found zip item AKA gif")
-        items = ZIP_IMAGE_SEARCH.findall(
-            response.text.replace("\\", "")
-        )
+        items = ZIP_IMAGE_SEARCH.findall(response.text.replace("\\", ""))
     else:
         LOGGER.debug("Not zip/gif item")
         items = IMAGE_SEARCH.findall(response.text.replace("\\", ""))
@@ -158,8 +146,7 @@ def get_artists_gallery(artist_id, save_to, php_session_id):
     )
 
     response = requests.get(
-        ARTISTS_PAGE.format(artist_id, page_id),
-        headers={"cookie": cookie},
+        ARTISTS_PAGE.format(artist_id, page_id), headers={"cookie": cookie}
     )
     try:
         body = response.json()
@@ -188,9 +175,7 @@ def get_pictures_from_gallery(page, save_to, php_session_id):
     )
 
     if response.status_code not in range(200, 299):
-        LOGGER.error(
-            "Failed with status: {}".format(response.status_code)
-        )
+        LOGGER.error("Failed with status: {}".format(response.status_code))
         return
 
     text = response.text.replace("&quot;", '"')
@@ -217,9 +202,7 @@ def build_duplicates_list(directories, allow_duplicates):
 
     start_time = time.time()
 
-    LOGGER.info(
-        "Searching for duplicates in: {}".format(directories)
-    )
+    LOGGER.info("Searching for duplicates in: {}".format(directories))
     for directory in directories:
         for _, _, files in os.walk(directory):
             DUPLICATES = DUPLICATES.union(set(files))
@@ -229,9 +212,7 @@ def build_duplicates_list(directories, allow_duplicates):
             _file.write(str(DUPLICATES))
 
     LOGGER.debug(
-        "Completed search in '{}' seconds".format(
-            time.time() - start_time
-        )
+        "Completed search in '{}' seconds".format(time.time() - start_time)
     )
 
 
@@ -259,9 +240,7 @@ def arguments():
     )
     parser.add_argument(
         "--pages",
-        help=(
-            "The specific page ids, comma separated or ranges (X-Y]"
-        ),
+        help=("The specific page ids, comma separated or ranges (X-Y]"),
     )
     parser.add_argument(
         "--destination",
@@ -271,10 +250,7 @@ def arguments():
         type=str,
     )
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        default=False,
-        help="Show debug logs",
+        "--debug", action="store_true", default=False, help="Show debug logs"
     )
     parser.add_argument(
         "--allow_duplicates",
@@ -304,9 +280,7 @@ def process():
         DEBUG = True
         LOGGER.setLevel(logging.DEBUG)
 
-    build_duplicates_list(
-        args.search_directories, args.allow_duplicates
-    )
+    build_duplicates_list(args.search_directories, args.allow_duplicates)
 
     if args.illustrations:
         illustration_ids = set(args.illustrations.split(","))
@@ -339,9 +313,7 @@ def process():
                 continue  # Skip blanks
 
             if "-" in page:
-                for page in range(
-                    *[int(x) for x in page.split("-")]
-                ):
+                for page in range(*[int(x) for x in page.split("-")]):
                     LOGGER.info("Processing Page {}".format(page))
                     get_pictures_from_gallery(
                         page=page,
