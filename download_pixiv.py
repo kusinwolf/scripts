@@ -1,3 +1,9 @@
+"""
+To retrieve your PHPSESSID, open up your cookies for .pixiv.net and grab it
+from there.
+*WARNING* DO NOT SHARE YOUR TOKEN WITH OTHERS
+"""
+
 # Standard imports
 import argparse
 import json
@@ -18,7 +24,7 @@ import requests
 # - Save/Read tokens from file
 
 
-VERSION = "2.0.2"
+VERSION = "2.1.0"
 CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -33,7 +39,7 @@ CONFIG = {
         "default": {
             "class": "logging.StreamHandler",
             "formatter": "standard",
-            "level": "INFO",
+            "level": "DEBUG",
         }
     },
     "root": {"handlers": ["default"], "level": "INFO"},
@@ -44,16 +50,14 @@ DEBUG = False
 
 ZIP_PAGE = "https://i.pximg.net/img-zip-ugoira/img/{}_ugoira1920x1080.zip"
 ARTISTS_PAGE = "https://www.pixiv.net/ajax/user/{}/profile/all"  # API call
-IMAGES_PAGE = (
-    "https://www.pixiv.net/member_illust.php?mode=medium&" + "illust_id={}"
+IMAGES_PAGE = "https://www.pixiv.net/member_illust.php?mode=medium&illust_id={}"
+GALLERY_PAGE = (
+    "https://www.pixiv.net/ajax/follow_latest/illust?p={}&mode=all&lang=en"
 )
-GALLERY_PAGE = "https://www.pixiv.net/bookmark_new_illust.php?p={}"
 DUPLICATES = set()
 
 # Regex compiles
-MULTIPLE_PAGES_SEARCH = re.compile(
-    r""".*meta-global-data.*content='(.*)'>.*"""
-)
+MULTIPLE_PAGES_SEARCH = re.compile(r""".*meta-global-data.*content='(.*)'>.*""")
 ZIP_IMAGE_SEARCH = re.compile(
     r"""original":"https://i\.pximg\.net/img-original/img/"""
     + r"([0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+)"
@@ -75,14 +79,15 @@ def get_pictures(illustration_id, save_to, php_session_id):
 
     total_images = 1
     image_link = None
-    cookie = "PHPSESSID={};".format(php_session_id)
 
     response = requests.get(
-        IMAGES_PAGE.format(illustration_id), headers={"cookie": cookie}
+        IMAGES_PAGE.format(illustration_id),
+        cookies={"PHPSESSID": php_session_id},
+        headers={"User-Agent": "Mozilla/5.0"},
     )
 
-    if response.status_code not in range(200, 299):
-        LOGGER.error("Failed with status: {}".format(response.status_code))
+    if response.status_code not in range(200, 300):
+        LOGGER.error(f"Failed with status: {response.status_code}")
         return
 
     # Multi-picture gallery
@@ -93,7 +98,7 @@ def get_pictures(illustration_id, save_to, php_session_id):
         )
         total_images = content["illust"][str(illustration_id)]["pageCount"]
 
-        LOGGER.debug("Found {} pages".format(total_images))
+        LOGGER.debug(f"Found {total_images} pages")
 
     # Zip file
     is_zip = "ugoira" in response.text
@@ -115,20 +120,18 @@ def get_pictures(illustration_id, save_to, php_session_id):
         image = image_link.format(x)
         x += 1
 
-        LOGGER.debug("Attempting: {}".format(image))
+        LOGGER.debug(f"Attempting: {image}")
         if image.split("/")[-1] in DUPLICATES:
             continue  # Skip the duplicate
 
-        LOGGER.info("Getting: {}".format(image))
+        LOGGER.info(f"Getting: {image}")
         command = " ".join(
             [
                 "wget",
                 image,
                 "--no-verbose",
-                '--header="referer: {}"'.format(
-                    IMAGES_PAGE.format(illustration_id)
-                ),
-                "--directory-prefix={}".format(save_to),
+                f'--header="referer: {IMAGES_PAGE.format(illustration_id)}"',
+                f"--directory-prefix={save_to}",
             ]
         )
         subprocess.call(command, shell=True)
@@ -141,16 +144,17 @@ def get_artists_gallery(artist_id, save_to, php_session_id):
     """
 
     page_id = 1
-    cookie = "PHPSESSID={}; referer={};".format(
-        php_session_id, ARTISTS_PAGE.format(artist_id, page_id)
-    )
-
     response = requests.get(
-        ARTISTS_PAGE.format(artist_id, page_id), headers={"cookie": cookie}
+        ARTISTS_PAGE.format(artist_id, page_id),
+        cookies={"PHPSESSID": php_session_id},
+        headers={
+            "referer": ARTISTS_PAGE.format(artist_id, page_id),
+            "User-Agent": "Mozilla/5.0",
+        },
     )
     try:
         body = response.json()
-        LOGGER.debug("Artists Gallery: {}".format(body))
+        LOGGER.debug(f"Artists Gallery: {body}")
         for illustration_id in body["body"]["illusts"].keys():
             get_pictures(
                 illustration_id=illustration_id,
@@ -159,32 +163,38 @@ def get_artists_gallery(artist_id, save_to, php_session_id):
             )
     except Exception as error:
         LOGGER.exception(error)
-        LOGGER.error("Artist ID: {} failed".format(artist_id))
+        LOGGER.error(f"Artist ID: {artist_id} failed")
 
 
-def get_pictures_from_gallery(page, save_to, php_session_id):
+def get_pictures_from_gallery(page, save_to, php_session_id, wait=1.0):
     """
     Loads the main page of subscribed artists and pulls all of the
     listed illustrations on that page, then grabs their images
     """
 
-    cookie = "PHPSESSID={};".format(php_session_id)
-
     response = requests.get(
-        GALLERY_PAGE.format(page), headers={"cookie": cookie}
+        GALLERY_PAGE.format(page),
+        cookies={"PHPSESSID": php_session_id},
+        headers={"User-Agent": "Mozilla/5.0"},
     )
 
-    if response.status_code not in range(200, 299):
-        LOGGER.error("Failed with status: {}".format(response.status_code))
+    if response.status_code == 429:
+        if wait > 8:
+            LOGGER.error("Failed with status: 429, failed too many times")
+            return
+
+        LOGGER.error(f"Failed with status: 429, waiting {wait} seconds")
+        time.sleep(wait)
+        get_pictures_from_gallery(page, save_to, php_session_id, wait=wait*2)
+
+    if response.status_code not in range(200, 300):
+        LOGGER.error(f"Failed with status: {response.status_code}")
         return
 
-    text = response.text.replace("&quot;", '"')
-    text = text.replace("&gt;", ">")
-    text = text.replace("&lt;", "<")
-    text = text.replace("&amp;", "&")
-    illustration_ids = ILLUSTRATION_ID_SEARCH.findall(text)
+    LOGGER.debug(f"get_pictures_from_gallery.response: {response.text}")
+    data = response.json()
 
-    for illust_id in illustration_ids:
+    for illust_id in data["body"]["page"]["ids"]:
         get_pictures(
             illustration_id=illust_id,
             save_to=save_to,
@@ -195,14 +205,14 @@ def get_pictures_from_gallery(page, save_to, php_session_id):
 def build_duplicates_list(directories, allow_duplicates):
     global DUPLICATES
 
-    LOGGER.debug("allow_duplicates: {}".format(allow_duplicates))
-    LOGGER.debug("directories: {}".format(directories))
+    LOGGER.debug(f"allow_duplicates: {allow_duplicates}")
+    LOGGER.debug(f"directories: {directories}")
     if allow_duplicates:
         return  # Don't bother searching for dups
 
     start_time = time.time()
 
-    LOGGER.info("Searching for duplicates in: {}".format(directories))
+    LOGGER.info(f"Searching for duplicates in: {directories}")
     for directory in directories:
         for _, _, files in os.walk(directory):
             DUPLICATES = DUPLICATES.union(set(files))
@@ -211,17 +221,15 @@ def build_duplicates_list(directories, allow_duplicates):
         with open("duplicates.txt", "w") as _file:
             _file.write(str(DUPLICATES))
 
-    LOGGER.debug(
-        "Completed search in '{}' seconds".format(time.time() - start_time)
-    )
+    LOGGER.debug(f"Completed search in '{time.time() - start_time}' seconds")
 
 
 def arguments():
     parser = argparse.ArgumentParser(
         description=(
-            "Download a images from pixiv via subscriber page "
+            "Download many images from pixiv via subscriber page "
             + "numbers, artist ids, and/or individual illustration "
-            + "ids\nCurrent version {}".format(VERSION)
+            + f"ids\nCurrent version {VERSION}"
         )
     )
     parser.add_argument(
@@ -240,7 +248,10 @@ def arguments():
     )
     parser.add_argument(
         "--pages",
-        help=("The specific page ids, comma separated or ranges (X-Y]"),
+        help=(
+            "The specific 'Newest by followed' page ids, comma separated or "
+            + "ranges [X-Y)"
+        ),
     )
     parser.add_argument(
         "--destination",
@@ -280,10 +291,12 @@ def process():
         DEBUG = True
         LOGGER.setLevel(logging.DEBUG)
 
+    LOGGER.debug(f"Got inputs: {args}")
     build_duplicates_list(args.search_directories, args.allow_duplicates)
 
     if args.illustrations:
         illustration_ids = set(args.illustrations.split(","))
+        LOGGER.debug(f"Working on illustrations: {illustration_ids}")
         for illustration_id in illustration_ids:
             if not illustration_id:
                 continue  # Skip blanks
@@ -296,6 +309,7 @@ def process():
 
     if args.artists:
         artists = set(args.artists.split(","))
+        LOGGER.debug(f"Working on artists: {artists}")
         for artist_id in artists:
             if not artist_id:
                 continue  # Skip blanks
@@ -308,13 +322,14 @@ def process():
 
     if args.pages:
         pages = set(args.pages.split(","))
+        LOGGER.debug(f"Working on pages: {pages}")
         for page in pages:
             if not page:
                 continue  # Skip blanks
 
             if "-" in page:
                 for page in range(*[int(x) for x in page.split("-")]):
-                    LOGGER.info("Processing Page {}".format(page))
+                    LOGGER.info(f"Processing Page {page}")
                     get_pictures_from_gallery(
                         page=page,
                         save_to=args.save_to,
